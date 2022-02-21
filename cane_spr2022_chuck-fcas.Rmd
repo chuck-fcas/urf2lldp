@@ -1,0 +1,1359 @@
+---
+title: "Using Rating Factors to Learn Loss Distribution Parameters"
+subtitle: "Including Some Applications<br/>⚔"
+author: "Chuck Lindberg, FCAS"
+date: "Spring CANE Meeting --- March 11, 2022"
+output:
+  xaringan::moon_reader:
+    css: xaringan-themer.css
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+  extra_dependencies:
+    cancel: null
+---
+
+```{r setup, include = FALSE}
+options(htmltools.dir.version = FALSE)
+
+library(tidyverse)
+library(xaringanthemer)
+library(kableExtra)
+library(latex2exp)
+source("R/boost_colors.R")
+
+set.seed(8888)
+
+style_duo_accent(
+  primary_color = "#16325f", 
+  secondary_color = "#0097a7",
+  header_font_google = google_font("Josefin Sans"),
+  text_font_google   = google_font("Montserrat", "300", "300i"),
+  code_font_google   = google_font("Fira Mono")
+  )
+
+```
+
+```{css, echo = FALSE}
+.title-slide h1 {
+  color: #e6e567;
+}
+.title-slide h2 {
+  color: #c7c8ca;
+}
+.huge .remark-code { /*Change made here*/
+  font-size: 200% !important;
+}
+.tiny .remark-code { /*Change made here*/
+  font-size: 50% !important;
+}
+.tinier .remark-code { /*Change made here*/
+  font-size: 40% !important;
+}
+.latex-red span.node-latex{
+ color:red;
+}
+.pull-left-less {
+  float: left;
+  width: 54%;
+}
+.pull-right-more {
+  float: right;
+  width: 40%;
+}
+```
+
+# First, a riddle
+
+Draw one straight line to make the equation correct.
+
+</br> 
+
+$5 + 5 + 5 = 550$
+
+--
+
+</br> 
+
+$5 + 5 + 5 \ne 550$
+
+--
+
+![](images/riddle.png)
+
+.footnote[
+There is more than one way to do what is demonstrated here today!
+]
+
+---
+
+class: inverse, middle
+
+# Content
+
+- Concept of URF2LLDP
+- Background Details
+- Learning Process
+- Applications
+- Appendix
+
+---
+
+# Concept of URF2LLDP
+
+Suppose the following:
+
+- We have a set of rating factors, particularly increased limit factors and/or deductible factors.  
+- It is not known how the factors were originally created, but they are trusted and useful.*
+
+**Can we find a loss distribution and learn it's parameters such that we can reasonably get close to the set of known rating factors?**
+
+</br>
+
+$$\frac{E[X; l | \Theta]}{E[X; b | \Theta]} = ILF(l) \longleftarrow \text{what is } \Theta ?$$
+.footnote[
+[*] Examples: lost or outdated documentation, competitor filings, or maybe a loss distribution wasn't used at all to create the factors. 
+]
+
+---
+
+class: inverse, center, middle
+
+# Background Details
+
+---
+
+# Limited Average Severity
+
+> The expected severity at a given limit of liability is known as the Limited Average Severity (LAS). Stated simply, the limited average severity is the average size of loss when all losses have been capped at the given policy limit. [1]
+
+Limited average severity given policy limit $x$ is denoted as follows: $$LAS(x) = E[X; x] = \\ \int_{0}^{x} u\ dF(u)\ + x \cdot \big(1 - F(x) \big) $$
+
+.pull-left[
+Other literature may write this as follows:   $$LAS(x) = E[X \wedge x]$$
+]
+
+.pull-right[
+```{r echo = FALSE, out.width = '70%'}
+knitr::include_graphics("images/las_3m.png")
+```
+]
+
+.footnote[
+[1] [Palmer, 2006. Increased Limits <br/> Ratemaking for Liability Insurance](https://www.casact.org/sites/default/files/database/studynotes_palmer.pdf)
+]
+
+---
+
+```{css, echo = FALSE}
+header {
+    margin: 0;
+    padding: 0;
+}
+```
+
+# Increased Limit Factors
+
+.pull-left[
+
+The ILF is the LAS at limit $l$ relative to the LAS at the base limit $b$.
+
+$$ILF(l) = \frac{E[X; l]}{E[X; b]}$$
+
+```{r echo = FALSE, out.width = '90%', dpi = 400}
+knitr::include_graphics("images/ilf_3m.png")
+```
+]
+
+.pull-right[
+
+The deductible factor is calculated as a "decreased limit factor".
+
+$$Ded(d) = ILF(d) = \frac{E[X; d]}{E[X; b]}$$
+
+```{r echo = FALSE, out.width = '90%', dpi = 400}
+knitr::include_graphics("images/ded_250k.png")
+```
+]
+
+Rating often applies the factor: $\big( E[X; l] - E[X; d] \big) / E[X; b]$
+
+---
+
+# ILFs and Additional Provisions
+
+It's possible the rating factors were derived including additional provisions.  If this is the case it may affect the learning process.
+
+### ILF with Additional Provisions at Each Limit
+
+$$ILF(l) = \frac{LAS(l) + ALAE(l) + ULAE(l) + RL(l)}{LAS(b) + ALAE(b) + ULAE(b) + RL(b)}$$
+
+### Indemnity Only
+
+$$ILF(l) = \frac{LAS(l)}{LAS(b)}$$
+
+.footnote[
+Additional provisions, such as ALAE, ULAE, and a Risk Load (RL), could be "flat"; i.e., they do not vary by limit.
+]
+
+---
+
+# LAS and Loss Distributions
+
+### Weibull (*β*, *δ*)
+
+$$\small{\beta^m \cdot \Gamma \big((x / \beta)^{\delta}, 1+m/\delta \big) + x^m e^{-(x/\beta)^{\delta}}}$$
+
+.tiny[
+```{r eval = FALSE}
+las_weibull <- function(x, beta, delta, m = 1){
+  beta^m * inc_gamma((x/beta)^delta, 1 + m/delta) + x^m * exp(-(x/beta)^delta)
+}
+```
+]
+
+### Gamma (*α*, *β*)
+
+$$\small{\beta^m \cdot \frac{\Gamma (x / \beta, \alpha + m)}{\Gamma(\alpha)} + x^m \bigg(1 - \frac{\Gamma(x / \beta, \alpha)}{\Gamma(\alpha)}\bigg)}$$
+.tiny[
+```{r eval = FALSE}
+las_gamma <- function(x, alpha, beta m = 1){
+  beta^m * inc_gamma(x/beta, alpha + m) / inc_gamma(Inf, α) + x^m * (1 - inc_gamma(x/beta, α) / inc_gamma(Inf, alpha))
+}
+```
+]
+
+---
+
+# LAS and Loss Distributions
+
+### Burr (*α*, *β*, *δ*)
+
+$$\small{\frac{\beta^{m/\delta}}{\Gamma(\alpha)} \cdot \Gamma(\alpha - m/\delta) \cdot \Gamma(1 + m/\delta) \cdot B \Bigg(1+m/\delta, \alpha - m/\delta, 1 - \frac{1}{1+(x \ \beta)^{\delta}}\Bigg)  + \frac{x^m}{[1+(x \ \beta)^{\delta}]^\alpha}}$$
+.tiny[
+```{r eval = FALSE}
+las_burr <- function(x, alpha, beta, delta, m = 1){
+  :/ # I don't want to program this.
+}
+```
+]
+
+### Lognormal (*µ*, *σ*)
+
+$$\small{e^{m\mu+m^2\sigma^2/2} \cdot \Phi\Bigg(\frac{\log x - \mu - m\sigma^2}{\sigma}\Bigg)+ x^m \cdot \Phi \Bigg(\frac{-\log x + \mu}{\sigma}\Bigg)}$$
+.tiny[
+```{r eval = FALSE}
+las_lognormal <- function(x, mu, sigma, m = 1){
+  :) # Not going to program this either.
+}
+```
+]
+
+---
+
+# Incomplete Gamma Function
+
+#### Clarification on Notation
+
+Notation on the prior slides, namely, $\Gamma(x, \alpha)$ is meant to be the `lower incomplete gamma function`, i.e., $\gamma(x, \alpha)$. 
+
+$$\small{\gamma(x, \alpha) = \int_{0}^{x} u^{\alpha - 1} e^{-u} du \ \ \ \ \ \ \ \ \ \ \ \ \ \ \   \Gamma(x, \alpha) = \int_{x}^{\infty} u^{\alpha - 1} e^{-u} du}$$
+$$\small{\Gamma(\alpha) = \int_{0}^{\infty} u^{\alpha - 1} e^{-u} du} \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \gamma(x, \alpha)+\Gamma(x, \alpha)=\Gamma(\alpha)$$
+
+**Actuarial texts use the notation $\Gamma(x, \alpha)$ to express integrating from $0$ to $x$.**
+
+#### R Code
+
+We can use the following function to "flip" the `gammainc` function provided by the `expint` package.
+
+.tiny[
+```{r echo = TRUE}
+inc_gamma <- function(x, alpha, lower = TRUE){
+  if(lower){ expint::gammainc(alpha, 0) - expint::gammainc(alpha, x) #Total area minus upper
+  } else   { expint::gammainc(alpha, x) }
+}
+```
+]
+
+---
+
+# Helper Functions
+
+Turns out we don't need the functions on prior slides because we have the `actuar` package. This package is maintained and used by several other `R` packages and authors such as [Loss Data Analytics](https://openacttexts.github.io/Loss-Data-Analytics/index.html) [1].
+
+```{r echo = FALSE}
+tibble(
+  `Chuck's Functions` = c("las_weibull",        "las_gamma",        "las_burr",        "las_lognormal"),
+  `actuar Package`    = c("actuar::levweibull", "actuar::levgamma", "actuar::levburr", "actuar::levlnorm")
+) %>% 
+kbl("html") %>%
+kable_styling(latex_options = "striped")
+```
+
+- The prefix `lev` stands for limited expected value in the `actuar` package.
+- `actuar` utilizes the `expint` package like we did before.
+
+.footnote[
+[1] Loss Data Analytics, https://openacttexts.github.io/Loss-Data-Analytics/index.html, *An open text authored by the Actuarial Community*
+]
+
+---
+
+class: inverse, center, middle
+
+# Learning Process
+
+---
+
+# Learning
+
+To demonstrate the learnings process we first start by generating ILFs using a Weibull distribution with parameters $\beta = 4000$ and $\delta = 0.25$.
+
+.pull-left[
+.tinier[
+```{r}
+beta  <- 4000
+delta <- 0.25
+
+df <-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+]
+]
+
+.pull-right[
+```{r echo = FALSE, dpi = 400}
+df %>% 
+mutate(name = "Generated ILF") %>% 
+ggplot(aes(x = limit, y = ilf)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost() +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10)) 
+```
+]
+
+---
+
+# Learning
+
+To fit the ILFs (our target), we create a function that outputs the sum of squared errors (SSE) and use the `optim` function to solve for $\beta$ and $\delta$.
+
+.pull-left[
+.tinier[
+```{r}
+beta  <- 4000
+delta <- 0.25
+
+df <-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+
+
+```{r eval = FALSE}
+f <- function(params) { 
+  
+  fit  <- 
+    df$limit %>% 
+    actuar::levweibull(.,    shape = params[1], scale = params[2])/
+    actuar::levweibull(10^6, shape = params[1], scale = params[2])
+    
+  sum((df$ilf - fit)^2) # SSE
+  
+}
+
+p   <- c(delta = 0.5, beta = 2000) # Set initial parameters
+opt <- optim(par = p, f) # Optimize
+
+delta <- opt$par[1]
+beta  <- opt$par[2]
+
+df <-
+  df %>% 
+  mutate(
+    ilf_fitted = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+]
+]
+
+.pull-right[
+```{r echo = FALSE, dpi = 400}
+
+# We repeat the code here to suppress warnings.
+f <- function(params) { 
+  
+  fit  <- 
+    df$limit %>% 
+    actuar::levweibull(.,    shape = params[1], scale = params[2]) %>% suppressWarnings()/
+    actuar::levweibull(10^6, shape = params[1], scale = params[2]) %>% suppressWarnings()
+    
+  sum((df$ilf - fit)^2) # SSE
+  
+}
+
+p   <- c(delta = 0.5, beta = 2000) # Set initial parameters
+opt <- optim(par = p, f) # Optimize
+
+delta <- opt$par[1]
+beta  <- opt$par[2]
+
+df <-
+  df %>% 
+  mutate(
+    ilf_fitted = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+
+df %>% 
+pivot_longer(c(ilf, ilf_fitted)) %>% 
+mutate(name = name %>% {if_else(. == "ilf", "Target", "ILF Fitted")}) %>%
+ggplot(aes(x = limit, y = value)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10)) + 
+annotate("text", x = 2.5*10^6, y = 0.75, label = TeX(paste0("$\\widehat{\\beta} = ",  round(beta, 2), "$"),  output = "character"), size = 5, parse = TRUE) +
+annotate("text", x = 2.5*10^6, y = 0.65, label = TeX(paste0("$\\widehat{\\delta} = ", round(delta, 5), "$"), output = "character"), size = 5, parse = TRUE)
+```
+]
+
+---
+
+# Learning - where we started
+
+The initial parameters we started with $(\beta = 2000$ and $\delta = 0.5)$ created a very different ILF curve than what was ultimately produced.
+
+.pull-left[
+.tinier[
+```{r}
+p <- c(delta = 0.5, beta = 2000) 
+
+df <-
+  df %>% 
+  mutate(
+    ilf_initial = 
+      actuar::levweibull(limit, shape = p[1], scale = p[2])/
+      actuar::levweibull(10^6,  shape = p[1], scale = p[2])
+  )
+```
+]
+
+- Picking initial parameters can be somewhat of a guessing game.
+
+- Keep the relationship of the parameters and the distribution in mind when initializing.
+]
+
+.pull-right[
+```{r echo = FALSE, dpi = 400}
+df %>% 
+pivot_longer(c(ilf, ilf_fitted, ilf_initial)) %>% 
+mutate(
+  name = 
+    name %>% 
+    {if_else(. == "ilf", "Target", .)} %>% 
+    str_replace_all("_", " ") %>% 
+    str_to_title %>% 
+    str_replace_all("Ilf", "ILF")
+) %>%
+ggplot(aes(x = limit, y = value)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10))
+```
+]
+
+---
+
+# Initial Parameters
+
+With most learning processes the initial parameters play big role in the outcome. Below are four different examples.
+
+```{r include = FALSE}
+#Reset df for simplicity
+beta  <- 4000
+delta <- 0.25
+
+df <-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  ) 
+
+p1   <- c(delta = 4, beta = 100000)
+opt1 <- optim(par = p1, f) %>% suppressWarnings()
+
+p2   <- c(delta = 0.15, beta = 8000)
+opt2 <- optim(par = p2, f) %>% suppressWarnings()
+
+p3   <- c(delta = 1, beta = 10000)
+opt3 <- optim(par = p3, f) %>% suppressWarnings()
+
+p4   <- c(delta = 2.5, beta = 60000)
+opt4 <- optim(par = p4, f) %>% suppressWarnings()
+
+df <-
+  df %>% 
+  mutate(
+    ilf_1 = 
+      actuar::levweibull(limit, shape = opt1$par[1], scale = opt1$par[2])/
+      actuar::levweibull(10^6,  shape = opt1$par[1], scale = opt1$par[2]),
+    ilf_2 = 
+      actuar::levweibull(limit, shape = opt2$par[1], scale = opt2$par[2])/
+      actuar::levweibull(10^6,  shape = opt2$par[1], scale = opt2$par[2]),
+    ilf_3 = 
+      actuar::levweibull(limit, shape = opt3$par[1], scale = opt3$par[2])/
+      actuar::levweibull(10^6,  shape = opt3$par[1], scale = opt3$par[2]),
+    ilf_4 = 
+      actuar::levweibull(limit, shape = opt4$par[1], scale = opt4$par[2])/
+      actuar::levweibull(10^6,  shape = opt4$par[1], scale = opt4$par[2])
+  )
+```
+
+```{r echo = FALSE, dpi = 400, fig.width = 9, fig.height = 5}
+df %>% 
+pivot_longer(c(ilf_1, ilf_2, ilf_3, ilf_4)) %>% 
+pivot_longer(c(ilf, value), names_to = "type") %>% 
+mutate(
+  name = 
+    case_when(
+      name == "ilf_1" ~ paste0("Initial Parameters = {",  p1[2] %>% format(big.mark = ",", scientific = FALSE), " | ", p1[1], "}"),
+      name == "ilf_2" ~ paste0("Initial Parameters = {",  p2[2] %>% format(big.mark = ",", scientific = FALSE), " | ", p2[1], "}"),
+      name == "ilf_3" ~ paste0("Initial Parameters = {",  p3[2] %>% format(big.mark = ",", scientific = FALSE), " | ", p3[1], "}"),
+      name == "ilf_4" ~ paste0("Initial Parameters = {",  p4[2] %>% format(big.mark = ",", scientific = FALSE), " | ", p4[1], "}")
+    ),
+  type = type %>% {if_else(. == "ilf", "Target", "ILF Fitted")}
+) %>% 
+ggplot(aes(x = limit, y = value)) +
+geom_line(aes(color  = type), size = 0.5) +
+geom_point(aes(color = type), size = 2) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 10, hjust = 0.6),
+  axis.text.y     = element_text(size = 10),
+  axis.title.x    = element_text(size = 12),
+  axis.title.y    = element_text(size = 12),
+  legend.text     = element_text(size = 12),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10)) +
+facet_wrap(~name, nrow = 2)
+```
+
+---
+
+# Initial Parameters
+
+.pull-left[
+Ways to combat initial parameters:
+- Trial and Error
+- Fit and tweak one of the parameters
+- "Boil the ocean"--- run a script
+- Add penalties
+
+```{r include = FALSE}
+#Reset df for simplicity
+beta  <- 4000
+delta <- 0.25
+
+df <-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  ) 
+```
+
+.tinier[
+```{r}
+f <- function(params) { 
+  
+  fit  <- 
+    tibble(
+        fitted_ilf = 
+          df$limit %>% 
+          actuar::levweibull(.,    shape = p1, scale = p2)/
+          actuar::levweibull(10^6, shape = p1, scale = p2),
+        penalty = (fitted_ilf == lag(fitted_ilf)) %>% replace_na(FALSE)
+    ) 
+
+  if(any(fit$penalty)){lambda <- 10^6} else {lambda <- 1}
+  
+  sum((df$ilf - fit$fitted_ilf)^2) * lambda # SSE x λ
+}
+
+p   <- c(delta = 0.15, beta = 8000)
+opt <- optim(par = p, f)
+
+delta <- opt$par[1]
+beta  <- opt$par[2]
+
+df <-
+  df %>% 
+  mutate(
+    ilf_fitted = 
+      limit %>% 
+      actuar::levweibull(.,    shape = delta, scale = beta)/
+      actuar::levweibull(10^6, shape = delta, scale = beta),
+    ilf_initial =
+      limit %>% 
+      actuar::levweibull(.,    shape = p[1], scale = p[2])/
+      actuar::levweibull(10^6, shape = p[1], scale = p[2])
+  )
+```
+]
+]
+
+.pull-right[
+```{r echo = FALSE, dpi = 400}
+df %>% 
+pivot_longer(c(ilf, ilf_fitted, ilf_initial)) %>% 
+mutate(
+  name = 
+    name %>% 
+    {if_else(. == "ilf", "Target", .)} %>% 
+    str_replace_all("_", " ") %>% 
+    str_to_title %>% 
+    str_replace_all("Ilf", "ILF")
+) %>% 
+ggplot(aes(x = limit, y = value)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10))
+```
+]
+
+---
+
+# Learning with Additional Provisions
+
+
+- Testing showed that learning a parameter for a fixed load by limit did not dramatically affect the learning process. [1]
+
+
+
+
+
+Suppose there is a suspected ALAE load that does not vary by limit.  
+
+.footnote[
+[1] 
+]
+
+
+---
+
+class: inverse, center, middle
+
+# Applications
+
+---
+
+# Interpolation/Extrapolation
+
+Once you have learned the distribution parameters it is trivial to add additional factors to your rating program.
+
+.pull-left[
+```{r echo = FALSE, dpi = 400}
+#Reset df for simplicity
+alpha <- 3
+beta  <- 800
+
+interpolate_spots <- c(1500, 2500, 3000, 5000)
+
+df <-
+  tibble(
+    set   = "Interpolate",
+    limit = interpolate_spots,
+    ilf   = 
+      actuar::levgamma(limit, shape = alpha, scale = beta)/
+      actuar::levgamma(2000,  shape = alpha, scale = beta)
+  ) %>% 
+  rbind(
+    tibble(
+    set = "Given",
+    limit = c(1000, 1:4 * 2000),
+    ilf   = 
+      actuar::levgamma(limit, shape = alpha, scale = beta)/
+      actuar::levgamma(2000,  shape = alpha, scale = beta)
+    )
+  )
+
+df %>% 
+ggplot(aes(x = limit, y = ilf)) +
+geom_point(aes(color = set), size = 4) +
+# geom_line(aes(color  = set), size = 1) +
+geom_line(data  = df %>% filter(set == "Given"), aes(x = limit, y = ilf), color = boost_colors(1), size = 1) +
+geom_point(data = df %>% filter(set == "Interpolate"), aes(x = limit, y = ilf), color = boost_colors(4), size = 6) +
+theme_bw() +
+scale_color_boost(reverse = FALSE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10))
+```
+]
+
+.pull-right[
+```{r echo = FALSE, dpi = 400}
+#Reset df for simplicity
+alpha <- 4
+beta  <- 400
+
+df <-
+  tibble(
+    set   = "Given",
+    limit = c(1.5, 2:5) * 500,
+    ilf   = 
+      actuar::levgamma(limit, shape = alpha, scale = beta)/
+      actuar::levgamma(1000,  shape = alpha, scale = beta)
+  ) %>% 
+  rbind(
+    tibble(
+    set = "Extrapolate",
+    limit = c(1:3 / 2, 2:8) * 500,
+    ilf   = 
+      actuar::levgamma(limit, shape = alpha, scale = beta)/
+      actuar::levgamma(1000,  shape = alpha, scale = beta)
+    )
+  )
+
+df %>% 
+ggplot(aes(x = limit, y = ilf)) +
+geom_point(aes(color = set), size = 4) +
+geom_line(aes(color  = set), size = 1) +
+geom_point(data = df %>% filter(set == "Given"), aes(x = limit, y = ilf), color = boost_colors(1), size = 4) +
+geom_line(data  = df %>% filter(set == "Given"), aes(x = limit, y = ilf), color = boost_colors(1), size = 1) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10))
+```
+]
+
+---
+
+# Smoothing 
+
+You may have factors that are not following a smooth pattern. 
+
+```{r echo = FALSE}
+
+df <-
+  tribble(
+    ~limit, ~ilf,   ~weight,
+    50000, 	 0.519, 1,
+    100000,	 1.000, 1,
+    250000,	 2.136, 1,
+    500000,	 3.355, 1,
+    750000,	 4.234, 1,
+    1000000, 4.950, 1,
+    2000000, 5.589, 0,
+    3000000, 7.162, 0,
+    4000000, 7.877, 0,
+    5000000, 8.730, 0
+  )
+
+# df <-
+#   df %>% filter(limit < 2*10^6 | limit == 5*10^6)
+
+f <- function(params) { 
+  
+  fit  <- 
+    df$limit %>% 
+    actuar::levweibull(.,    shape = params[1], scale = params[2]) %>% suppressWarnings/
+    actuar::levweibull(10^5, shape = params[1], scale = params[2]) %>% suppressWarnings
+    
+  sum(((df$ilf - fit) * df$weight)^2) # SSE
+}
+
+p   <- c(delta = 0.1, beta = 400) # Set initial parameters
+opt <- optim(par = p, f) # Optimize
+
+delta <- opt$par[1]
+beta  <- opt$par[2]
+
+df <-
+  df %>% 
+  mutate(
+    ilf_fitted = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^5,  shape = delta, scale = beta)
+  )
+```
+
+.pull-left[
+```{r echo = FALSE, dpi = 400}
+df %>% 
+pivot_longer(c(ilf, ilf_fitted)) %>% 
+mutate(name = name %>% {if_else(. == "ilf", "Target", "ILF Fitted")}) %>%
+ggplot(aes(x = limit, y = value)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10))
+```
+]
+
+.pull-right[
+
+.tinier[
+```{r eval = FALSE}
+f <- function(params) { 
+  
+  fit  <- 
+    df$limit %>% 
+    actuar::levweibull(.,    shape = params[1], scale = params[2])/
+    actuar::levweibull(10^5, shape = params[1], scale = params[2])
+    
+  sum(((df$ilf - fit) * df$weight)^2) # SSE
+}
+```
+]
+
+```{r echo = FALSE}
+df %>% 
+rename_with(~ .x %>% str_replace_all("_", " ") %>% str_to_title %>% str_replace_all("Ilf", "ILF")) %>% 
+mutate(Limit = Limit %>% format(big.mark = ",")) %>% 
+kbl("html") %>%
+kable_styling(latex_options = "striped", font_size = 12) %>% 
+column_spec(1:4, width = "25em")
+```
+]
+
+---
+
+# Trending 
+
+Fit the "outdated" ILFs with this learning method, then apply a trend factor $\tau = 1 + r$ where $r$ is the annual trend.
+
+$$\small{E[\tau \ X; x] = \tau \ E[X; x / \tau]   \ \ \ \ \ \ \ \ \ \ \ \ \ \ \  \ \ \   ILF(\tau \ l) = \frac{E[X; l / \tau]}{E[X; b / \tau]}}$$
+.pull-left[
+.tinier[
+```{r}
+# Suppose these are the learned parameters
+beta  <- 4000
+delta <- 0.25
+
+# Suppose 5 years of historical trend at 5%.
+trend <- 1.05 ^ 5 
+
+df <-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf_trend   = 
+      actuar::levweibull(limit / trend, shape = delta, scale = beta)/
+      actuar::levweibull(10^6  / trend, shape = delta, scale = beta),
+    ilf_fitted   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+]
+
+This method makes it extremely simple to add trend to increased limit factors.
+
+]
+
+.pull-right[
+```{r echo = FALSE, dpi = 400}
+df %>% 
+pivot_longer(c(ilf_fitted, ilf_trend)) %>% 
+mutate(name = name %>% {if_else(. == "ilf_fitted", "ILF Fitted", "ILF Trended")}) %>%
+ggplot(aes(x = limit, y = value)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10))
+```
+]
+
+---
+
+# Deductibles
+
+If deductible factors are presented as multiplicative factors you'll need to change the math around: $\big( E[X; \infty] - E[X; d] \big) / E[X; b]$
+
+```{r echo = FALSE}
+
+df <-
+  tribble(
+  ~deductible, ~factor, ~weight,
+  0,	  1.359,	0,
+  250,	1.000,	1,
+  500,	0.815,	1,
+  750,	0.655,  1,
+  1000,	0.556,  1
+  )
+
+f <- function(params) { 
+  
+  fit  <- 
+    df$deductible %>% 
+   {actuar::levweibull(Inf, shape = params[1], scale = params[2]) - 
+    actuar::levweibull(.,   shape = params[1], scale = params[2])} %>% suppressWarnings/
+    actuar::levweibull(250, shape = params[1], scale = params[2])  %>% suppressWarnings
+    
+  sum(((df$factor - fit) * df$weight)^2) # SSE
+}
+
+p   <- c(delta = 10, beta = 500) # Set initial parameters
+opt <- optim(par = p, f) # Optimize
+
+delta <- opt$par[1]
+beta  <- opt$par[2]
+
+df <-
+  df %>% 
+  mutate(
+    ded_fitted = 
+      (actuar::levweibull(Inf, shape = delta, scale = beta) - 
+      actuar::levweibull(deductible, shape = delta, scale = beta))/
+      actuar::levweibull(250,  shape = delta, scale = beta)
+  )
+```
+
+.pull-left[
+.tinier[
+```{r eval = FALSE}
+
+f <- function(params) { 
+  
+  fit  <- 
+    df$deductible %>% 
+   {actuar::levweibull(Inf, shape = params[1], scale = params[2]) - 
+    actuar::levweibull(.,   shape = params[1], scale = params[2])}/
+    actuar::levweibull(250, shape = params[1], scale = params[2])
+    
+  sum(((df$factor - fit) * df$weight)^2) # SSE
+}
+
+p   <- c(delta = 10, beta = 500) # Set initial parameters
+opt <- optim(par = p, f) # Optimize
+
+delta <- opt$par[1]
+beta  <- opt$par[2]
+
+df <-
+  df %>% 
+  mutate(
+    ded_fitted = 
+      (actuar::levweibull(Inf, shape = delta, scale = beta) - 
+      actuar::levweibull(deductible, shape = delta, scale = beta))/
+      actuar::levweibull(250,  shape = delta, scale = beta)
+  )
+```
+]
+
+Note: in this example there was 0 weight on the zero-dollar deductible. 
+
+<!-- It could have been selected or derived empirically.  In either case there wasn't a good fit including it in the learning process. -->
+
+]
+
+.pull-right[
+```{r echo = FALSE, dpi = 400}
+df %>% 
+pivot_longer(c(factor, ded_fitted)) %>% 
+mutate(name = name %>% {if_else(. == "factor", "Target", "Fitted")}) %>%
+ggplot(aes(x = deductible, y = value)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Deductible") + 
+ylab("Deductible Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10))
+```
+]
+
+---
+
+# Fitting Empirical Data!
+
+```{r echo = FALSE}
+alpha <- 3.907288
+beta  <- 397.931
+
+# Table 2.2 in https://www.casact.org/sites/default/files/2021-03/8_Bahnemann.pdf
+# tibble(
+#   limit = c(1, 1 + 0.5* 1:8) * 1000,
+#   prob  = limit %>% actuar::ptrgamma(shape1 = alpha, scale = beta, shape2 = 1) %>% {1 - .}, # Pr(X >)
+#   las   = limit %>% actuar::levgamma(shape  = alpha, scale = beta)
+# )
+
+df <- 
+  "https://www.casact.org/sites/default/files/2021-02/02-Bahnemann.pdf" %>% 
+  tabulizer::extract_tables(pages = 63, area = list(c(541, 172, 719, 514)), guess = FALSE, output = "data.frame") %>% 
+  .[[1]] %>% 
+  select(limit = 1, las_sample = 4) %>% 
+  mutate(
+    across(everything(), ~ .x %>% str_remove(",") %>% as.numeric),
+    las_method_of_moments = limit %>% actuar::levgamma(shape = alpha, scale = beta)
+  )
+
+f <- function(params) { 
+  
+  fit  <- 
+    df$limit %>% 
+    actuar::levgamma(., shape = params[1], scale = params[2]) %>% suppressWarnings()
+    
+  sum((df$las_sample - fit)^2) # SSE
+  
+}
+
+p   <- c(alpha = 1, beta = 1000)
+opt <- optim(par = p, f)
+
+df <-
+  df %>% 
+  mutate(
+    las_fitted = actuar::levgamma(limit, shape = opt$par[1], scale = opt$par[2])
+  )
+```
+
+.pull-left[
+```{r echo = FALSE, dpi = 400}
+df %>% 
+pivot_longer(c(las_sample, las_fitted, las_method_of_moments)) %>% 
+mutate(name = name %>% str_replace_all("_", " ") %>% str_to_title %>% str_remove_all("Las ")) %>% 
+ggplot(aes(x = limit, y = value)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Limited Average Severity") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10))
+```
+
+.tinier[
+```{r eval = FALSE}
+f <- function(params) { 
+  
+  fit  <- 
+    df$limit %>% 
+    actuar::levgamma(., shape = params[1], scale = params[2])
+    
+  sum((df$las_sample - fit)^2) # SSE
+}
+```
+]
+]
+
+.pull-right[
+
+This method produces a better fit than method of moments.
+
+- Method of Moments SSE = `r sum((df$las_sample - df$las_method_of_moments)^2) %>% round(., 0)`
+- Learning Method SSE = `r sum((df$las_sample - df$las_fitted)^2) %>% round(., 0)`
+
+```{r echo = FALSE}
+df %>% 
+mutate(across(everything(), ~ round(.x, 1) %>% format(big.mark = ",", scientific = FALSE))) %>% 
+rename(Limit = 1, Sample = 2, MoM = 3, Fitted = 4) %>%  
+kbl("html") %>%
+kable_styling(latex_options = "striped", font_size = 12) %>% 
+column_spec(1:4, width = "30em")
+```
+]
+
+---
+
+# More Content
+
+Use Cases
+
+<!-- - Add trend factor -->
+
+To do
+
+- Try many models
+- Finish initial parameter slide
+
+Ideas
+
+- Deductible x ILF
+<!-- - Show how an ALAE load would affect this. -->
+<!-- - Fitting actual data? Yeah, use the Gamma LAS example from the paper. -->
+- Do many models
+<!-- - Weight two LAS together and learn that parameter. -->
+
+
+Last slide
+
+- Talk about fitting in excel
+- ISO mixed methodology and future research
+- Loss Costs in Layers Instead of Rating Factors
+- Fitting mutiple curves at once
+
+
+---
+
+class: inverse, center, middle
+
+# Appendix
+
+---
+
+# Fixed ALAE Load Parameter
+
+Below is an example of fitting with an ALAE load that is fixed per limit.  
+
+.pull-left[
+.tinier[
+```{r}
+beta  <- 4000
+delta <- 0.25
+alae  <- 500
+
+df <-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = 
+      (actuar::levweibull(limit, shape = delta, scale = beta) + alae)/
+      (actuar::levweibull(10^6,  shape = delta, scale = beta) + alae),
+    ilf_no_alae   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+
+
+```{r eval = FALSE}
+f <- function(params) { 
+  
+  fit  <- 
+    (actuar::levweibull(df$limit, shape = params[1], scale = params[2]) + params[3]) /
+    (actuar::levweibull(10^6,     shape = params[1], scale = params[2]) + params[3])
+    
+  sum((df$ilf - fit)^2) # SSE
+  
+}
+
+p   <- c(delta = 0.5, beta = 2000) # Set initial parameters
+opt <- optim(par = p, f) # Optimize
+
+delta <- opt$par[1]
+beta  <- opt$par[2]
+
+df <-
+  df %>% 
+  mutate(
+    ilf_fitted = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+]
+]
+
+.pull-right[
+```{r echo = FALSE, dpi = 400}
+
+# We repeat the code here to suppress warnings.
+f <- function(params) { 
+  
+  fit  <- 
+    (actuar::levweibull(df$limit, shape = params[1], scale = params[2]) + params[3]) %>% suppressWarnings()/
+    (actuar::levweibull(10^6,     shape = params[1], scale = params[2]) + params[3]) %>% suppressWarnings()
+    
+  sum((df$ilf - fit)^2) # SSE
+  
+}
+
+p   <- c(delta = 0.5, beta = 2000, alae = 800) # Set initial parameters
+opt <- optim(par = p, f) # Optimize
+
+delta <- opt$par[1]
+beta  <- opt$par[2]
+alae  <- opt$par[3]
+
+df <-
+  df %>% 
+  mutate(
+    ilf_fitted = 
+      (actuar::levweibull(limit, shape = delta, scale = beta) + alae)/
+      (actuar::levweibull(10^6,  shape = delta, scale = beta) + alae)
+  )
+
+df %>% 
+pivot_longer(c(ilf, ilf_fitted)) %>% 
+mutate(name = name %>% {if_else(. == "ilf", "Target", "ILF Fitted")}) %>%
+ggplot(aes(x = limit, y = value)) +
+geom_line(aes(color  = name), size = 1) +
+geom_point(aes(color = name), size = 4) +
+theme_bw() +
+scale_color_boost(reverse = TRUE) +
+theme(
+  legend.title    = element_blank(),
+  axis.text.x     = element_text(size = 14, hjust = 0.6),
+  axis.text.y     = element_text(size = 14),
+  axis.title.x    = element_text(size = 16),
+  axis.title.y    = element_text(size = 16),
+  legend.text     = element_text(size = 16),
+  legend.position = "top"
+  ) +
+xlab("Limit") + 
+ylab("Increased Limit Factor") +
+scale_x_continuous(labels = scales::number_format(big.mark = ",")) + 
+scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+theme(axis.text.x = element_text(angle = 10)) + 
+annotate("text", x = 2.5*10^6, y = 0.75, label = TeX(paste0("$\\widehat{\\beta} = ",  round(beta, 2), "$"),  output = "character"), size = 5, parse = TRUE) +
+annotate("text", x = 2.5*10^6, y = 0.65, label = TeX(paste0("$\\widehat{\\delta} = ", round(delta, 5), "$"), output = "character"), size = 5, parse = TRUE)
+```
+]
