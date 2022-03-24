@@ -121,7 +121,7 @@ Suppose the following:
 
 </br>
 
-$$\frac{E[X; l | \Theta]}{E[X; b | \Theta]} = ILF(l) \longleftarrow \text{what is } \Theta ?$$
+$$ILF(l) = \frac{E[X; l | \Theta]}{E[X; b | \Theta]} \text{  } \longleftarrow \text{what is } \Theta ?$$
 .footnote[
 [*] Examples: lost or outdated documentation, competitor filings, or maybe a loss distribution wasn't used at all to create the factors. 
 ]
@@ -946,7 +946,7 @@ Learning the distribution can be achieved with an algorithm.
 
 .pull-left[
 **Step 1.** create a dataframe with all inputs:
-  - Distributions
+  - Distribution
   - Initial parameters which coincide with the distribution
   - Limits
 
@@ -992,9 +992,9 @@ df <-
 # Scale ILFs to LAS
 
 - The base limit has a large effect on the learning process.
-- Fitting limited average severity can be easier.
+- Fitting limited average severity seems to work better.
   - Brief research shows lower standard errors scaling the ILFs.
-- Not scaling may not solve for the scale parameter.
+- Not scaling may not solve for a more proper scale parameter.
 
 .pull-left[
 .tinier[
@@ -1312,9 +1312,10 @@ f <- function(params) {
 
 ```{r echo = FALSE}
 df %>% 
+mutate(ilf_fitted = round(ilf_fitted, 4)) %>% 
 rename_with(~ .x %>% str_replace_all("_", " ") %>% str_to_title %>% str_replace_all("Ilf", "ILF")) %>% 
 mutate(Limit = Limit %>% format(big.mark = ",")) %>% 
-kbl("html") %>%
+kbl("html", align = c("l", rep("c", 3))) %>%
 kable_styling(latex_options = "striped", font_size = 12) %>% 
 column_spec(1:4, width = "25em")
 ```
@@ -1587,7 +1588,7 @@ This method produces a better fit than method of moments.
 df %>% 
 mutate(across(everything(), ~ round(.x, 1) %>% format(big.mark = ",", scientific = FALSE))) %>% 
 rename(Limit = 1, Sample = 2, MoM = 3, Fitted = 4) %>%  
-kbl("html") %>%
+kbl("html", align = "c") %>%
 kable_styling(latex_options = "striped", font_size = 12) %>% 
 column_spec(1:4, width = "30em")
 ```
@@ -1603,15 +1604,6 @@ class: inverse, center, middle
 
 # Final Thoughts
 
-### Learning Process
-
-- Be ready for trial and error.
-- Simplify, can get better fits when scaling ILFs or fitting LAS.
-  - The scale could be the empirical limited average severity.
-- Use weights of zero to remove influence of certain factors.
-- **Be cautious** of how the fitted parameters are used!
-- Absolute error or log error can be better than sum of squared errors.
-
 ### Other Thoughts
 
 - Fitting in excel (possible but difficult)
@@ -1621,13 +1613,23 @@ class: inverse, center, middle
 - ISO mixed methodology
 - Additional research necessary on fitting empirical data
 
+### Learning Process
+
+- Be ready for trial and error.
+- Simplify, can get better fits when scaling ILFs or fitting LAS.
+  - The scale could be the empirical limited average severity.
+- Use weights of zero to remove influence of certain factors.
+- Absolute error or log error can be better than sum of squared errors.
+- **Be cautious** of how the fitted parameters are used!
+
 ---
 
 class: center, middle
 
 # Thank you!
 
-
 Presentation made with [xaringan](https://github.com/yihui/xaringan)
 
 You can find all code on github: [chuck-fcas/urf2lldp](https://github.com/chuck-fcas/urf2lldp)
+
+Connect with me on [LinkedIn](https://www.linkedin.com/in/charles-lindberg-fcas-35690715)
