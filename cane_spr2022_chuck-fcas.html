@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Using Rating Factors to Learn Loss Distribution Parameters</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Chuck Lindberg, FCAS" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <script src="libs/kePrint/kePrint.js"></script>
+    <link href="libs/lightable/lightable.css" rel="stylesheet" />
+    <link rel="stylesheet" href="xaringan-themer.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Using Rating Factors to Learn Loss Distribution Parameters
+## Including Some Applications<br/>⚔
+### Chuck Lindberg, FCAS
+### Spring CANE Meeting — March 25, 2022
+
+---
+
+
+
+
+&lt;style type="text/css"&gt;
+.title-slide h1 {
+  color: #e6e567;
+}
+.title-slide h2 {
+  color: #c7c8ca;
+}
+.huge .remark-code { /*Change made here*/
+  font-size: 200% !important;
+}
+.tiny .remark-code { /*Change made here*/
+  font-size: 50% !important;
+}
+.tinier .remark-code { /*Change made here*/
+  font-size: 40% !important;
+}
+.latex-red span.node-latex{
+ color:red;
+}
+.pull-left-less {
+  float: left;
+  width: 54%;
+}
+.pull-right-more {
+  float: right;
+  width: 40%;
+}
+.pull-left-more {
+  float: left;
+  width: 40%;
+}
+.pull-right-less {
+  float: right;
+  width: 54%;
+}
+&lt;/style&gt;
+
+# First, a riddle
+
+Draw one straight line to make the equation correct.
+
+&lt;/br&gt; 
+
+`\(5 + 5 + 5 = 550\)`
+
+--
+
+&lt;/br&gt; 
+
+`\(5 + 5 + 5 \ne 550\)`
+
+--
+
+![](images/riddle.png)
+
+.footnote[
+There is more than one way to do what is demonstrated here today!
+]
+
+---
+
+class: inverse, middle
+
+# Content
+
+- Concept of URF2LLDP
+- Background Details
+- Learning Process
+- Applications
+- Closing Remarks
+
+---
+
+# Concept of URF2LLDP
+
+Suppose the following:
+
+- We have a set of rating factors, particularly increased limit factors and/or deductible factors.  
+- It is not known how the factors were originally created, but they are trusted and useful.*
+
+**Can we find a loss distribution and learn it's parameters such that we can reasonably get close to the set of known rating factors?**
+
+&lt;/br&gt;
+
+`$$ILF(l) = \frac{E[X; l | \Theta]}{E[X; b | \Theta]} \text{  } \longleftarrow \text{what is } \Theta ?$$`
+.footnote[
+[*] Examples: lost or outdated documentation, competitor filings, or maybe a loss distribution wasn't used at all to create the factors. 
+]
+
+---
+
+class: inverse, center, middle
+
+# Background Details
+
+---
+
+# Limited Average Severity
+
+&gt; The expected severity at a given limit of liability is known as the Limited Average Severity (LAS). Stated simply, the limited average severity is the average size of loss when all losses have been capped at the given policy limit. [1]
+
+Limited average severity given policy limit `\(x\)` is denoted as follows: $$LAS(x) = E[X; x] = \\ \int_{0}^{x} u\ dF(u)\ + x \cdot \big(1 - F(x) \big) $$
+
+.pull-left[
+Other literature may write this as follows:   `$$LAS(x) = E[X \wedge x]$$`
+]
+
+.pull-right[
+&lt;img src="images/las_3m.png" width="70%" /&gt;
+]
+
+.footnote[
+[1] [Palmer, 2006. Increased Limits &lt;br/&gt; Ratemaking for Liability Insurance](https://www.casact.org/sites/default/files/database/studynotes_palmer.pdf)
+]
+
+---
+
+&lt;style type="text/css"&gt;
+header {
+    margin: 0;
+    padding: 0;
+}
+&lt;/style&gt;
+
+# Increased Limit Factors
+
+.pull-left[
+
+The ILF is the LAS at limit `\(l\)` relative to the LAS at the base limit `\(b\)`.
+
+`$$ILF(l) = \frac{E[X; l]}{E[X; b]}$$`
+
+&lt;img src="images/ilf_3m.png" width="90%" /&gt;
+]
+
+.pull-right[
+
+The deductible factor is calculated as a "decreased limit factor".
+
+`$$Ded(d) = ILF(d) = \frac{E[X; d]}{E[X; b]}$$`
+
+&lt;img src="images/ded_250k.png" width="90%" /&gt;
+]
+
+Rating often applies the factor: `\(\big( E[X; l] - E[X; d] \big) / E[X; b]\)`
+
+---
+
+# ILFs and Additional Provisions
+
+It's possible the rating factors were derived including additional provisions.  If this is the case it may affect the learning process.
+
+### ILF with Additional Provisions at Each Limit
+
+`$$ILF(l) = \frac{LAS(l) + ALAE(l) + ULAE(l) + RL(l)}{LAS(b) + ALAE(b) + ULAE(b) + RL(b)}$$`
+
+### Indemnity Only
+
+`$$ILF(l) = \frac{LAS(l)}{LAS(b)}$$`
+
+.footnote[
+Additional provisions, such as ALAE, ULAE, and a Risk Load (RL), could be "flat"; i.e., they do not vary by limit.
+]
+
+---
+
+# LAS and Loss Distributions
+
+### Weibull (*β*, *δ*)
+
+`$$\small{\beta^m \cdot \Gamma \big((x / \beta)^{\delta}, 1+m/\delta \big) + x^m e^{-(x/\beta)^{\delta}}}$$`
+
+.tiny[
+
+```r
+las_weibull &lt;- function(x, beta, delta, m = 1){
+  beta^m * inc_gamma((x/beta)^delta, 1 + m/delta) + x^m * exp(-(x/beta)^delta)
+}
+```
+]
+
+### Gamma (*α*, *β*)
+
+`$$\small{\beta^m \cdot \frac{\Gamma (x / \beta, \alpha + m)}{\Gamma(\alpha)} + x^m \bigg(1 - \frac{\Gamma(x / \beta, \alpha)}{\Gamma(\alpha)}\bigg)}$$`
+.tiny[
+
+```r
+las_gamma &lt;- function(x, alpha, beta m = 1){
+  beta^m * inc_gamma(x/beta, alpha + m) / inc_gamma(Inf, α) + x^m * (1 - inc_gamma(x/beta, α) / inc_gamma(Inf, alpha))
+}
+```
+]
+
+---
+
+# LAS and Loss Distributions
+
+### Burr (*α*, *β*, *δ*)
+
+`$$\small{\frac{\beta^{m/\delta}}{\Gamma(\alpha)} \cdot \Gamma(\alpha - m/\delta) \cdot \Gamma(1 + m/\delta) \cdot B \Bigg(1+m/\delta, \alpha - m/\delta, 1 - \frac{1}{1+(x \ \beta)^{\delta}}\Bigg)  + \frac{x^m}{[1+(x \ \beta)^{\delta}]^\alpha}}$$`
+.tiny[
+
+```r
+las_burr &lt;- function(x, alpha, beta, delta, m = 1){
+  :/ # I don't want to program this.
+}
+```
+]
+
+### Lognormal (*µ*, *σ*)
+
+`$$\small{e^{m\mu+m^2\sigma^2/2} \cdot \Phi\Bigg(\frac{\log x - \mu - m\sigma^2}{\sigma}\Bigg)+ x^m \cdot \Phi \Bigg(\frac{-\log x + \mu}{\sigma}\Bigg)}$$`
+.tiny[
+
+```r
+las_lognormal &lt;- function(x, mu, sigma, m = 1){
+  :) # Not going to program this either.
+}
+```
+]
+
+---
+
+# Incomplete Gamma Function
+
+#### Clarification on Notation
+
+Notation on the prior slides, namely, `\(\Gamma(x, \alpha)\)` is meant to be the `lower incomplete gamma function`, i.e., `\(\gamma(x, \alpha)\)`. 
+
+`$$\small{\gamma(x, \alpha) = \int_{0}^{x} u^{\alpha - 1} e^{-u} du \ \ \ \ \ \ \ \ \ \ \ \ \ \ \   \Gamma(x, \alpha) = \int_{x}^{\infty} u^{\alpha - 1} e^{-u} du}$$`
+`$$\small{\Gamma(\alpha) = \int_{0}^{\infty} u^{\alpha - 1} e^{-u} du} \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \gamma(x, \alpha)+\Gamma(x, \alpha)=\Gamma(\alpha)$$`
+
+**Actuarial texts use the notation `\(\Gamma(x, \alpha)\)` to express integrating from `\(0\)` to `\(x\)`.**
+
+#### R Code
+
+We can use the following function to "flip" the `gammainc` function provided by the `expint` package.
+
+.tiny[
+
+```r
+inc_gamma &lt;- function(x, alpha, lower = TRUE){
+  if(lower){ expint::gammainc(alpha, 0) - expint::gammainc(alpha, x) #Total area minus upper
+  } else   { expint::gammainc(alpha, x) }
+}
+```
+]
+
+---
+
+# Helper Functions
+
+Turns out we don't need the functions on prior slides because we have the `actuar` package. This package is maintained and used by several other `R` packages and authors such as [Loss Data Analytics](https://openacttexts.github.io/Loss-Data-Analytics/index.html) [1].
+
+&lt;table class="table" style="margin-left: auto; margin-right: auto;"&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; Chuck's Functions &lt;/th&gt;
+   &lt;th style="text-align:left;"&gt; actuar Package &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; las_weibull &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; actuar::levweibull &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; las_gamma &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; actuar::levgamma &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; las_burr &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; actuar::levburr &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; las_lognormal &lt;/td&gt;
+   &lt;td style="text-align:left;"&gt; actuar::levlnorm &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+- The prefix `lev` stands for limited expected value in the `actuar` package.
+- `actuar` utilizes the `expint` package like we did before.
+
+.footnote[
+[1] Loss Data Analytics, https://openacttexts.github.io/Loss-Data-Analytics/index.html, *An open text authored by the Actuarial Community*
+]
+
+---
+
+class: inverse, center, middle
+
+# Learning Process
+
+---
+
+# Learning
+
+To demonstrate the learnings process we first start by generating ILFs using a Weibull distribution with parameters `\(\beta = 4000\)` and `\(\delta = 0.25\)`.
+
+.pull-left[
+.tinier[
+
+```r
+beta  &lt;- 4000
+delta &lt;- 0.25
+
+df &lt;-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+]
+]
+
+.pull-right[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-13-1.png)&lt;!-- --&gt;
+]
+
+---
+
+# Learning
+
+To fit the ILFs (our target), we create a function that outputs the sum of squared errors (SSE) and use the `optim` function to solve for `\(\beta\)` and `\(\delta\)`.
+
+.pull-left[
+.tinier[
+
+```r
+beta  &lt;- 4000
+delta &lt;- 0.25
+
+df &lt;-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+
+
+
+```r
+f &lt;- function(params) { 
+  
+  fit  &lt;- 
+    df$limit %&gt;% 
+    actuar::levweibull(.,    shape = params[1], scale = params[2])/
+    actuar::levweibull(10^6, shape = params[1], scale = params[2])
+    
+  sum((df$ilf - fit)^2) # SSE
+  
+}
+
+p   &lt;- c(delta = 0.5, beta = 2000) # Set initial parameters
+opt &lt;- optim(par = p, f) # Optimize
+
+delta &lt;- opt$par[1]
+beta  &lt;- opt$par[2]
+
+df &lt;-
+  df %&gt;% 
+  mutate(
+    ilf_fitted = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+]
+]
+
+.pull-right[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-16-1.png)&lt;!-- --&gt;
+]
+
+---
+
+# Learning - where we started
+
+The initial parameters we started with `\((\beta = 2000\)` and `\(\delta = 0.5)\)` created a very different ILF curve than what was ultimately produced.
+
+.pull-left[
+.tinier[
+
+```r
+p &lt;- c(delta = 0.5, beta = 2000) 
+
+df &lt;-
+  df %&gt;% 
+  mutate(
+    ilf_initial = 
+      actuar::levweibull(limit, shape = p[1], scale = p[2])/
+      actuar::levweibull(10^6,  shape = p[1], scale = p[2])
+  )
+```
+]
+
+- Picking initial parameters can be somewhat of a guessing game.
+
+- Keep the relationship of the parameters and the distribution in mind when initializing.
+]
+
+.pull-right[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-18-1.png)&lt;!-- --&gt;
+]
+
+---
+
+# Initial Parameters
+
+With most learning processes the initial parameters play big role in the outcome. Below are four different examples.
+
+
+
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-20-1.png)&lt;!-- --&gt;
+
+---
+
+# Initial Parameters
+
+.pull-left[
+Ways to combat initial parameters:
+- Trial and Error
+- Inspect the curve implied
+- Method of moments
+- Add penalties...?
+
+
+
+.tinier[
+
+Example of adding a penalty when the curve is flat:
+
+```r
+f &lt;- function(params) { 
+  
+  fit  &lt;- 
+    tibble(
+        fitted_ilf = 
+          df$limit %&gt;% 
+          actuar::levweibull(.,    shape = params[1], scale = params[2])/
+          actuar::levweibull(10^6, shape = params[1], scale = params[2]),
+        penalty = (fitted_ilf == lag(fitted_ilf)) %&gt;% replace_na(FALSE)
+    ) 
+
+  if(any(fit$penalty)){lambda &lt;- 10^6} else {lambda &lt;- 1}
+  
+  sum((df$ilf - fit$fitted_ilf)^2) * lambda # SSE x λ
+}
+```
+]
+]
+
+.pull-right[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-23-1.png)&lt;!-- --&gt;
+
+]
+
+More research is necessary to provide additional guidance on initial parameters. It might be better to create a customized learning algorithm rather than using `optim`. 
+
+---
+
+# Learning Additional Provisions
+
+Suppose there is a suspected ALAE load that does not vary by limit. In other words, for any `\(l\)` and `\(b\)`, `\(ALAE(l) = ALAE(b)\)`.
+
+`$$ILF(l) = \frac{LAS(l) + ALAE(l)}{LAS(b) + ALAE(b)}$$`
+
+.pull-left-more[
+Testing showed that a fixed load parameter did not dramatically affect learning.  
+]
+
+.pull-right-less[
+.tinier[
+
+```r
+f &lt;- function(params) { 
+  
+  fit  &lt;- 
+    (actuar::levweibull(df$limit, shape = params[1], scale = params[2]) + params[3]) /
+    (actuar::levweibull(10^6,     shape = params[1], scale = params[2]) + params[3])
+    
+  sum((df$ilf - fit)^2) # SSE
+  
+}
+```
+]
+]
+
+&lt;br&gt; &lt;br&gt; &lt;br&gt; &lt;br&gt; &lt;br&gt; &lt;br&gt; **If you're unable to get a good fit using a distribution it does not imply the ILFs your trying to fit are improper.**  It's possible there was some other derivation or assumptions used such as:
+
+- Risk load by limit
+- Empirical methods
+- Judgmental selection
+
+---
+
+# Fixed ALAE Load Parameter
+
+Below is an example of fitting with an ALAE load that is fixed per limit.  
+
+.pull-left-less[
+.tinier[
+
+```r
+beta  &lt;- 4000
+delta &lt;- 0.25
+alae  &lt;- 800
+
+df &lt;-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = 
+      (actuar::levweibull(limit, shape = delta, scale = beta) + alae)/
+      (actuar::levweibull(10^6,  shape = delta, scale = beta) + alae),
+    ilf_no_alae   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+
+
+
+```r
+f &lt;- function(params) { 
+  
+  fit  &lt;- 
+    (actuar::levweibull(df$limit, shape = params[1], scale = params[2]) + params[3]) /
+    (actuar::levweibull(10^6,     shape = params[1], scale = params[2]) + params[3])
+    
+  sum((df$ilf - fit)^2) # SSE
+  
+}
+
+p   &lt;- c(delta = 0.5, beta = 2000, alae = 500) # Set initial parameters
+opt &lt;- optim(par = p, f) # Optimize
+
+delta &lt;- opt$par[1]
+beta  &lt;- opt$par[2]
+alae  &lt;- opt$par[3]
+
+df &lt;-
+  df %&gt;% 
+  mutate(
+    ilf_fitted = 
+      (actuar::levweibull(limit, shape = delta, scale = beta) + alae)/
+      (actuar::levweibull(10^6,  shape = delta, scale = beta) + alae)
+  )
+```
+]
+]
+
+.pull-right-more[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-27-1.png)&lt;!-- --&gt;
+]
+
+---
+
+# Learning the Distribution
+
+Learning the distribution is a bit tricky because you have to learn different sets of parameters and choose initial parameters for each.
+
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-28-1.png)&lt;!-- --&gt;
+
+---
+
+# Learning the Distribution
+
+Learning the distribution can be achieved with an algorithm.
+
+.pull-left[
+**Step 1.** create a dataframe with all inputs:
+  - Distribution
+  - Initial parameters which coincide with the distribution
+  - Limits
+
+**Step 2.** create a function or set of functions to learn parameters.
+
+**Step 3.** loop over the distributions or invoke map.
+
+**Step 4.** choose distribution with the best fit.
+]
+
+.pull-right[
+
+Example of `invoke_map` to produce limited average severity for each distribution with different parameters. This produced the graph on the last slide.
+
+.tinier[
+
+```r
+limits &lt;- c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6
+
+df &lt;-
+  tibble(
+    distribution = 
+      c("Weibull", "Gamma", "Burr", "Lognormal"),
+    limit = list(limits),
+    params = 
+      list(
+        list(limit = limits, shape  = 0.25, scale  = 4000),
+        list(limit = limits, shape  = 0.1, scale  = 500000),
+        list(limit = limits, shape1 = 0.3,  shape2 = 1),
+        list(limit = limits, meanlog = log(300), sdlog = log(50))
+        ),
+    func = 
+      c("levweibull", "levgamma", "levburr", "levlnorm")
+  ) %&gt;% 
+  mutate(
+    lev = invoke_map(func, params)
+  )
+```
+]
+]
+
+---
+
+# Scale ILFs to LAS
+
+- The base limit has a large effect on the learning process.
+- Fitting limited average severity seems to work better.
+  - Brief research shows lower standard errors scaling the ILFs.
+- Not scaling may not solve for a more proper scale parameter.
+
+.pull-left[
+.tinier[
+
+```r
+beta  &lt;- 4000
+delta &lt;- 0.25
+scale &lt;- 50000
+
+df &lt;-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf   = #Pretend these ILFs are your rating factors
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta),
+    lev = ilf * scale
+  )
+```
+
+
+
+```r
+f &lt;- function(params) { 
+  
+  fit  &lt;- 
+    df$limit %&gt;% 
+    actuar::levweibull(., shape = params[1], scale = params[2]) / 
+    scale
+    
+  sum((df$ilf - fit)^2) # SSE
+  
+}
+
+p   &lt;- c(delta = 0.5, beta = 2000) # Set initial parameters
+opt &lt;- optim(par = p, f) # Optimize
+
+delta &lt;- opt$par[1]
+beta  &lt;- opt$par[2]
+
+df &lt;-
+  df %&gt;% 
+  mutate(
+    ilf_fitted = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+]
+]
+
+.pull-right[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-32-1.png)&lt;!-- --&gt;
+]
+
+---
+
+class: inverse, center, middle
+
+# Applications
+
+---
+
+# Interpolation/Extrapolation
+
+Once you have learned the distribution parameters it is trivial to add additional factors to your rating program.
+
+.pull-left[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-33-1.png)&lt;!-- --&gt;
+]
+
+.pull-right[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-34-1.png)&lt;!-- --&gt;
+]
+
+---
+
+# Smoothing 
+
+You may have factors that are not following a smooth pattern. 
+
+
+
+.pull-left[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-36-1.png)&lt;!-- --&gt;
+]
+
+.pull-right[
+
+.tinier[
+
+```r
+f &lt;- function(params) { 
+  
+  fit  &lt;- 
+    df$limit %&gt;% 
+    actuar::levweibull(.,    shape = params[1], scale = params[2])/
+    actuar::levweibull(10^5, shape = params[1], scale = params[2])
+    
+  sum(((df$ilf - fit) * df$weight)^2) # SSE
+}
+```
+]
+
+&lt;table class="table" style="font-size: 12px; margin-left: auto; margin-right: auto;"&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; Limit &lt;/th&gt;
+   &lt;th style="text-align:center;"&gt; ILF &lt;/th&gt;
+   &lt;th style="text-align:center;"&gt; Weight &lt;/th&gt;
+   &lt;th style="text-align:center;"&gt; ILF Fitted &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 50,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 0.519 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 0.5441 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 100,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 1.000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 1.0000 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 250,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 2.136 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 2.0865 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 500,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 3.355 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 3.3648 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 750,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 4.234 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 4.2642 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 1,000,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 4.950 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 1 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 4.9311 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 2,000,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 5.589 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 0 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 6.4137 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 3,000,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 7.162 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 0 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 7.0525 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 4,000,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 7.877 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 0 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 7.3655 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;width: 25em; "&gt; 5,000,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 8.730 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 0 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 25em; "&gt; 7.5309 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+---
+
+# Trending 
+
+Fit the "outdated" ILFs with this learning method, then apply a trend factor `\(\tau = 1 + r\)` where `\(r\)` is the annual trend.
+
+`$$\small{E[\tau \ X; x] = \tau \ E[X; x / \tau]   \ \ \ \ \ \ \ \ \ \ \ \ \ \ \  \ \ \   ILF(\tau \ l) = \frac{E[X; l / \tau]}{E[X; b / \tau]}}$$`
+.pull-left[
+.tinier[
+
+```r
+# Suppose these are the learned parameters
+beta  &lt;- 4000
+delta &lt;- 0.25
+
+# Suppose 5 years of historical trend at 5%.
+trend &lt;- 1.05 ^ 5 
+
+df &lt;-
+  tibble(
+    limit = c(0.05 * 1:2, 0.25 * 1:3, 1:5) * 10^6,
+    ilf_trend   = 
+      actuar::levweibull(limit / trend, shape = delta, scale = beta)/
+      actuar::levweibull(10^6  / trend, shape = delta, scale = beta),
+    ilf_fitted   = 
+      actuar::levweibull(limit, shape = delta, scale = beta)/
+      actuar::levweibull(10^6,  shape = delta, scale = beta)
+  )
+```
+]
+
+This method makes it extremely simple to add trend to increased limit factors.
+
+]
+
+.pull-right[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-40-1.png)&lt;!-- --&gt;
+]
+
+---
+
+# Deductibles
+
+If deductible factors are presented as multiplicative factors you'll need to change the math around: `\(\big( E[X; \infty] - E[X; d] \big) / E[X; b]\)`
+
+
+
+.pull-left[
+.tinier[
+
+```r
+f &lt;- function(params) { 
+  
+  fit  &lt;- 
+    df$deductible %&gt;% 
+   {actuar::levweibull(Inf, shape = params[1], scale = params[2]) - 
+    actuar::levweibull(.,   shape = params[1], scale = params[2])}/
+    actuar::levweibull(250, shape = params[1], scale = params[2])
+    
+  sum(((df$factor - fit) * df$weight)^2) # SSE
+}
+
+p   &lt;- c(delta = 10, beta = 500) # Set initial parameters
+opt &lt;- optim(par = p, f) # Optimize
+
+delta &lt;- opt$par[1]
+beta  &lt;- opt$par[2]
+
+df &lt;-
+  df %&gt;% 
+  mutate(
+    ded_fitted = 
+      (actuar::levweibull(Inf, shape = delta, scale = beta) - 
+      actuar::levweibull(deductible, shape = delta, scale = beta))/
+      actuar::levweibull(250,  shape = delta, scale = beta)
+  )
+```
+]
+
+Note: in this example there was 0 weight on the zero-dollar deductible. 
+
+&lt;!-- It could have been selected or derived empirically.  In either case there wasn't a good fit including it in the learning process. --&gt;
+
+]
+
+.pull-right[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-43-1.png)&lt;!-- --&gt;
+]
+
+---
+
+# Fitting Empirical Data!
+
+
+
+.pull-left[
+![](cane_spr2022_chuck-fcas_files/figure-html/unnamed-chunk-45-1.png)&lt;!-- --&gt;
+
+.tinier[
+
+```r
+f &lt;- function(params) { 
+  
+  fit  &lt;- 
+    df$limit %&gt;% 
+    actuar::levgamma(., shape = params[1], scale = params[2])
+    
+  sum((df$las_sample - fit)^2) # SSE
+}
+```
+]
+]
+
+.pull-right[
+
+This method produces a better fit than method of moments.
+
+- Method of Moments SSE = 1107
+- Learning Method SSE = 798
+
+&lt;table class="table" style="font-size: 12px; margin-left: auto; margin-right: auto;"&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:center;"&gt; Limit &lt;/th&gt;
+   &lt;th style="text-align:center;"&gt; Sample &lt;/th&gt;
+   &lt;th style="text-align:center;"&gt; MoM &lt;/th&gt;
+   &lt;th style="text-align:center;"&gt; Fitted &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 895 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 924.5 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 918.7 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,500 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,214 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,223.2 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,215.1 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 2,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,398 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,396.2 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,390.1 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 2,500 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,490 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,484.2 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,482.3 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 3,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,533 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,525.1 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,527.0 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 3,500 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,549 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,542.9 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,547.4 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 4,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,554 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,550.2 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,556.3 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 4,500 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,555 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,553.1 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,560.1 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 5,000 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,555 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,554.2 &lt;/td&gt;
+   &lt;td style="text-align:center;width: 30em; "&gt; 1,561.6 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+---
+
+class: inverse, center, middle
+
+# Closing Remarks
+
+---
+
+# Final Thoughts
+
+### Other Thoughts
+
+- Fitting in excel (possible but difficult)
+- Loss costs in layers instead of rating factors
+- ILF `\(\times\)` Deductible
+- ILF `\(\times\)` Exposures
+- ISO mixed methodology
+- Additional research necessary on fitting empirical data
+
+### Learning Process
+
+- Be ready for trial and error.
+- Simplify, can get better fits when scaling ILFs or fitting LAS.
+  - The scale could be the empirical limited average severity.
+- Use weights of zero to remove influence of certain factors.
+- Absolute error or log error can be better than sum of squared errors.
+- **Be cautious** of how the fitted parameters are used!
+
+---
+
+class: center, middle
+
+# Thank you!
+
+Presentation made with [xaringan](https://github.com/yihui/xaringan)
+
+You can find all code on github: [chuck-fcas/urf2lldp](https://github.com/chuck-fcas/urf2lldp)
+
+Connect with me on [LinkedIn](https://www.linkedin.com/in/charles-lindberg-fcas-35690715)
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
