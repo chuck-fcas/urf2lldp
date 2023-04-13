@@ -2,7 +2,7 @@
 title: "Using Rating Factors to Learn Loss Distribution Parameters"
 subtitle: "Including Some Applications<br/>⚔"
 author: "Chuck Lindberg, FCAS"
-date: "Spring CANE Meeting --- March 25, 2022"
+date: "Spring BACE Meeting --- April 19, 2023"
 output:
   xaringan::moon_reader:
     css: xaringan-themer.css
@@ -342,7 +342,7 @@ df <-
 df %>% 
 mutate(name = "Generated ILF") %>% 
 ggplot(aes(x = limit, y = ilf)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost() +
@@ -451,7 +451,7 @@ df %>%
 pivot_longer(c(ilf, ilf_fitted)) %>% 
 mutate(name = name %>% {if_else(. == "ilf", "Target", "ILF Fitted")}) %>%
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -513,7 +513,7 @@ mutate(
     str_replace_all("Ilf", "ILF")
 ) %>%
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -598,7 +598,7 @@ mutate(
   type = type %>% {if_else(. == "ilf", "Target", "ILF Fitted")}
 ) %>% 
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = type), size = 0.5) +
+geom_line(aes(color  = type), linewidth = 0.5) +
 geom_point(aes(color = type), size = 2) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -715,7 +715,7 @@ mutate(
     str_replace_all("Ilf", "ILF")
 ) %>% 
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -861,7 +861,7 @@ df %>%
 pivot_longer(c(ilf, ilf_fitted)) %>% 
 mutate(name = name %>% {if_else(. == "ilf", "Target", "ILF Fitted")}) %>%
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -916,7 +916,7 @@ df <-
 df %>% 
 unnest(c(limit, lev)) %>% 
 ggplot(aes(x = limit, y = lev)) +
-geom_line(aes(color  = distribution), size = 0.5) +
+geom_line(aes(color  = distribution), linewidth = 0.5) +
 geom_point(aes(color = distribution), size = 2) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -1076,7 +1076,7 @@ df %>%
 pivot_longer(c(ilf, ilf_fitted)) %>% 
 mutate(name = name %>% {if_else(. == "ilf", "Target", "ILF Fitted")}) %>%
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -1144,7 +1144,7 @@ df %>%
 ggplot(aes(x = limit, y = ilf)) +
 geom_point(aes(color = set), size = 4) +
 # geom_line(aes(color  = set), size = 1) +
-geom_line(data  = df %>% filter(set == "Given"), aes(x = limit, y = ilf), color = boost_colors(1), size = 1) +
+geom_line(data  = df %>% filter(set == "Given"), aes(x = limit, y = ilf), color = boost_colors(1), linewidth = 1) +
 geom_point(data = df %>% filter(set == "Interpolate"), aes(x = limit, y = ilf), color = boost_colors(4), size = 6) +
 theme_bw() +
 scale_color_boost(reverse = FALSE) +
@@ -1192,9 +1192,9 @@ df <-
 df %>% 
 ggplot(aes(x = limit, y = ilf)) +
 geom_point(aes(color = set), size = 4) +
-geom_line(aes(color  = set), size = 1) +
+geom_line(aes(color  = set), linewidth = 1) +
 geom_point(data = df %>% filter(set == "Given"), aes(x = limit, y = ilf), color = boost_colors(1), size = 4) +
-geom_line(data  = df %>% filter(set == "Given"), aes(x = limit, y = ilf), color = boost_colors(1), size = 1) +
+geom_line(data  = df %>% filter(set == "Given"), aes(x = limit, y = ilf), color = boost_colors(1), linewidth = 1) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
 theme(
@@ -1273,7 +1273,7 @@ df %>%
 pivot_longer(c(ilf, ilf_fitted)) %>% 
 mutate(name = name %>% {if_else(. == "ilf", "Target", "ILF Fitted")}) %>%
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -1361,7 +1361,7 @@ df %>%
 pivot_longer(c(ilf_fitted, ilf_trend)) %>% 
 mutate(name = name %>% {if_else(. == "ilf_fitted", "ILF Fitted", "ILF Trended")}) %>%
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -1471,7 +1471,7 @@ df %>%
 pivot_longer(c(factor, ded_fitted)) %>% 
 mutate(name = name %>% {if_else(. == "factor", "Target", "Fitted")}) %>%
 ggplot(aes(x = deductible, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
@@ -1543,7 +1543,7 @@ df %>%
 pivot_longer(c(las_sample, las_fitted, las_method_of_moments)) %>% 
 mutate(name = name %>% str_replace_all("_", " ") %>% str_to_title %>% str_remove_all("Las ")) %>% 
 ggplot(aes(x = limit, y = value)) +
-geom_line(aes(color  = name), size = 1) +
+geom_line(aes(color  = name), linewidth = 1) +
 geom_point(aes(color = name), size = 4) +
 theme_bw() +
 scale_color_boost(reverse = TRUE) +
