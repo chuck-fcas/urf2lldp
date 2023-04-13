@@ -74,6 +74,16 @@ style_duo_accent(
 }
 ```
 
+# Antitrust Notice
+
+The Casualty Actuarial Society is committed to adhering strictly to the letter and spirit of the antitrust laws.  Seminars conducted under the auspices of the CAS are designed solely to provide a forum for the expression of various points of view on topics described in the programs or agendas for such meetings.  
+
+Under no circumstances shall CAS seminars be used as a means for competing companies or firms to reach any understanding – expressed or implied – that restricts competition or in any way impairs the ability of members to exercise independent business judgment regarding matters affecting competition.  
+
+It is the responsibility of all seminar participants to be aware of antitrust regulations, to prevent any written or verbal discussions that appear to violate these laws, and to adhere in every respect to the CAS antitrust compliance policy.
+
+---
+
 # First, a riddle
 
 Draw one straight line to make the equation correct.

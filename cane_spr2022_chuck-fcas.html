@@ -13,10 +13,18 @@
     <textarea id="source">
 class: center, middle, inverse, title-slide
 
+.title[
 # Using Rating Factors to Learn Loss Distribution Parameters
+]
+.subtitle[
 ## Including Some Applications<br/>⚔
+]
+.author[
 ### Chuck Lindberg, FCAS
-### Spring CANE Meeting — March 25, 2022
+]
+.date[
+### Spring BACE Meeting — April 19, 2023
+]
 
 ---
 
@@ -59,6 +67,16 @@ class: center, middle, inverse, title-slide
   width: 54%;
 }
 &lt;/style&gt;
+
+# Antitrust Notice
+
+The Casualty Actuarial Society is committed to adhering strictly to the letter and spirit of the antitrust laws.  Seminars conducted under the auspices of the CAS are designed solely to provide a forum for the expression of various points of view on topics described in the programs or agendas for such meetings.  
+
+Under no circumstances shall CAS seminars be used as a means for competing companies or firms to reach any understanding – expressed or implied – that restricts competition or in any way impairs the ability of members to exercise independent business judgment regarding matters affecting competition.  
+
+It is the responsibility of all seminar participants to be aware of antitrust regulations, to prevent any written or verbal discussions that appear to violate these laws, and to adhere in every respect to the CAS antitrust compliance policy.
+
+---
 
 # First, a riddle
 
@@ -1100,6 +1118,19 @@ if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
     deleted = true;
   });
 })();
+// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
+// screen reader (see PR #262)
+(function(d) {
+  let res = {};
+  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
+    const t = tr.querySelector('td:nth-child(2)').innerText;
+    tr.querySelectorAll('td:first-child .key').forEach(key => {
+      const k = key.innerText;
+      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
+    });
+  });
+  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
+})(document);
 (function() {
   "use strict"
   // Replace <script> tags in slides area to make them executable
